@@ -205,7 +205,9 @@ def compute_stats(subset):
     aw     = float(wins["pnl_pct"].mean())   if len(wins)   > 0 else 0.0
     al     = float(losses["pnl_pct"].mean()) if len(losses) > 0 else 0.0
     ap     = float(subset["pnl_pct"].mean())
-    pf     = abs(aw / al) if al != 0 else float("inf")
+    gross_profit = wins["pnl_pct"].sum()
+    gross_loss   = abs(losses["pnl_pct"].sum())
+    pf           = gross_profit / gross_loss if gross_loss > 0 else float("inf")
     std    = float(subset["pnl_pct"].std())
     sharpe = ap / std if std > 0 else 0.0   # per-trade Sharpe (not annualised)
     mdd    = _max_drawdown(subset.sort_values("entry_date")["pnl_pct"])
