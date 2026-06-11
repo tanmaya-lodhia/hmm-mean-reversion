@@ -27,6 +27,13 @@ HMM_N_STATES   = 3    # bull / high_vol / bear
 HMM_VOL_WINDOW = 21   # rolling std window for volatility feature (trading days)
 HMM_RANDOM_SEED = 42
 
+# Walk-forward fitting: SPX history starts earlier than the backtest so the
+# first refit already has several years of training data. The model is refit
+# every REFIT_EVERY trading days on an expanding window; each block of days is
+# labelled by a model that was fit only on data BEFORE that block.
+SPX_TRAIN_START = "2015-01-01"
+REFIT_EVERY     = 63   # ~quarterly
+
 # ── Universe ──────────────────────────────────────────────────
 MAX_TICKERS = 400
 BATCH_SIZE  = 50

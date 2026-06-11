@@ -17,9 +17,9 @@ Usage:
 import argparse
 import pandas as pd
 
-from config import START_DATE, END_DATE
+from config import START_DATE, END_DATE, SPX_TRAIN_START
 from data import fetch_spx, build_features
-from regime import RegimeHMM
+from regime import RegimeHMM, walk_forward_regimes
 from universe import (
     get_russell2000_tickers,
     load_price_cache, save_price_cache, download_price_data,
@@ -38,21 +38,33 @@ def main(start=START_DATE, end=END_DATE):
     print(f"  Period: {start}  →  {end}")
     print(f"{'='*62}")
 
-    # ── 1. SPX + HMM regime labels ──────────────────────────────
-    print("\n[1/5] Fitting HMM on SPX returns...")
-    spx_raw      = fetch_spx(start, end)
-    X, spx_df    = build_features(spx_raw)
-    hmm          = RegimeHMM()
-    hmm.fit(X)
+    # ── 1. SPX + walk-forward HMM regime labels ─────────────────
+    # SPX history starts at SPX_TRAIN_START so the first refit has several
+    # years of training data. Each block of trading days is labelled by an
+    # HMM fit only on data BEFORE that block (out-of-sample labels).
+    print(f"\n[1/5] Walk-forward HMM on SPX (training from {SPX_TRAIN_START})...")
+    spx_raw   = fetch_spx(SPX_TRAIN_START, end)
+    X, spx_all = build_features(spx_raw)
 
-    print(f"\n  Regime summary:")
-    print(hmm.summary(X))
-    print(f"\n  Transition matrix:")
-    print(hmm.transition_matrix())
+    first_oos_idx = int((spx_all.index < start).sum())
+    print(f"      {first_oos_idx} training days before {start}, "
+          f"{len(spx_all) - first_oos_idx} OOS days to label.")
 
-    # Regime series at each SPX trading date (in-sample labels)
-    regime_raw    = hmm.regime_series(X, spx_df.index)
-    spx_df["regime"] = regime_raw                          # unlagged — for SPX chart
+    regime_raw = walk_forward_regimes(X, spx_all.index, first_oos_idx)
+
+    # Diagnostic: model fit on pre-backtest training data only
+    hmm_train = RegimeHMM().fit(X[:first_oos_idx])
+    print(f"\n  Training-period regime summary (fit ≤ {start}):")
+    print(hmm_train.summary(X[:first_oos_idx]))
+    print(f"\n  Training-period transition matrix:")
+    print(hmm_train.transition_matrix())
+
+    print(f"\n  Walk-forward (OOS) regime distribution:")
+    print(regime_raw.value_counts().to_string())
+
+    # OOS slice of SPX for the chart, with unlagged labels
+    spx_df = spx_all.iloc[first_oos_idx:].copy()
+    spx_df["regime"] = regime_raw
 
     # Lag regime by 1 day so each signal date gets yesterday's known regime
     regime_lagged = regime_raw.shift(1)
