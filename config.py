@@ -8,7 +8,7 @@ END_DATE   = "2024-12-31"
 
 # ── Signal filters ────────────────────────────────────────────
 MIN_GAIN_PCT      = 10.0      # minimum open→close intraday gain (%)
-MIN_PRICE         = 2.0       # minimum close price ($)
+MIN_PRICE         = 5.0       # minimum close price ($)
 MIN_DOLLAR_VOLUME = 500_000   # minimum dollar volume on signal day
 TOP_N_GAINERS     = 10        # cap: top N gainers per day considered
 
