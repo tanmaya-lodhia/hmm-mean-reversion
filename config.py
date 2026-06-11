@@ -20,7 +20,7 @@ EARNINGS_WINDOW = 3
 
 # ── Trade execution ───────────────────────────────────────────
 MAX_HOLD_DAYS = 10     # forced exit after this many bars
-STOP_LOSS_PCT = 20.0   # stop loss: exit if daily High ≥ entry × (1 + SL%)
+STOP_LOSS_PCT = 15.0   # stop loss: exit if daily High ≥ entry × (1 + SL%)
 
 # ── HMM ──────────────────────────────────────────────────────
 HMM_N_STATES   = 3    # bull / high_vol / bear

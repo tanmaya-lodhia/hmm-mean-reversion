@@ -70,54 +70,56 @@ def near_earnings(ticker, date, earnings_cache, window_days=EARNINGS_WINDOW):
 
 def simulate_trade(ticker, signal_date, price_data):
     """
-    Short entry: OPEN of the bar immediately after signal_date.
-    Stop loss:   exit at stop_price if that bar's High ≥ stop_price.
-    Exit rules:  (i) first close that is higher than the prior close
-                 (ii) stop loss triggered on daily High
-                 (iii) MAX_HOLD_DAYS forced exit
-    P&L formula: (entry − exit) / entry × 100  (positive = profit for short)
+    Entry:  signal-day Close (market-on-close order) — captures the full
+            overnight/premarket fade before next-day open.
+    Stop:   exit at stop_price if any subsequent bar's High ≥ entry × 1.15.
+    Exit:   first bar whose close is higher than the prior close
+            (prev_close anchored to entry price on the first bar).
+    P&L:    (entry − exit) / entry × 100  (positive = profit for short).
     """
     df = price_data.get(ticker)
     if df is None:
         return None
 
-    future = df[df.index > signal_date].head(MAX_HOLD_DAYS + 2)
-    if len(future) < 2:
+    if signal_date not in df.index:
         return None
 
-    entry_row   = future.iloc[0]
-    entry_price = float(entry_row["Open"])
-    entry_date  = future.index[0]
+    entry_price = float(df.loc[signal_date, "Close"])
     if entry_price <= 0:
         return None
 
+    future = df[df.index > signal_date].head(MAX_HOLD_DAYS + 1)
+    if future.empty:
+        return None
+
     stop_price  = entry_price * (1 + STOP_LOSS_PCT / 100)
-    prev_close  = float(entry_row["Close"])
+    prev_close  = entry_price   # first comparison is vs. signal-day close
     exit_price  = None
     exit_date   = None
     exit_reason = "max_hold"
 
-    for i in range(1, len(future)):
+    for i in range(len(future)):
         row        = future.iloc[i]
         curr_high  = float(row["High"])
         curr_close = float(row["Close"])
+        bar_date   = future.index[i].strftime("%Y-%m-%d")
 
-        # Check stop loss against the day's high before checking close
+        # Stop loss — checked against intraday high before close comparison
         if curr_high >= stop_price:
             exit_price  = stop_price
-            exit_date   = future.index[i]
+            exit_date   = bar_date
             exit_reason = "stop_loss"
             break
 
         if i >= MAX_HOLD_DAYS:
             exit_price  = curr_close
-            exit_date   = future.index[i]
+            exit_date   = bar_date
             exit_reason = "max_hold"
             break
 
         if curr_close > prev_close:
             exit_price  = curr_close
-            exit_date   = future.index[i]
+            exit_date   = bar_date
             exit_reason = "rebound"
             break
 
@@ -131,10 +133,10 @@ def simulate_trade(ticker, signal_date, price_data):
     return {
         "ticker":      ticker,
         "signal_date": signal_date.strftime("%Y-%m-%d"),
-        "entry_date":  entry_date.strftime("%Y-%m-%d"),
+        "entry_date":  signal_date.strftime("%Y-%m-%d"),   # same day — MOC order
         "entry_price": round(entry_price, 4),
         "exit_price":  round(exit_price, 4),
-        "exit_date":   exit_date.strftime("%Y-%m-%d"),
+        "exit_date":   exit_date,
         "exit_reason": exit_reason,
         "pnl_pct":     round(pnl_pct, 4),
         "win":         pnl_pct > 0,
