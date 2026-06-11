@@ -18,14 +18,7 @@ def fetch_spx(start, end):
 
 
 def build_features(df):
-    """
-    Two-feature matrix for the HMM:
-      col 0 — daily log return
-      col 1 — 21-day rolling standard deviation of log returns
-
-    Returns (X: np.ndarray, df: DataFrame with feature columns).
-    The first HMM_VOL_WINDOW−1 rows are dropped because rolling vol is NaN.
-    """
+    """Feature matrix for the HMM: daily log return + rolling vol."""
     df = df.copy()
     df["rolling_vol"] = df["log_return"].rolling(HMM_VOL_WINDOW).std()
     df = df.dropna(subset=["rolling_vol"])

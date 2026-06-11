@@ -1,5 +1,3 @@
-# backtest.py  —  signal generation, trade simulation, and per-regime statistics
-
 import numpy as np
 import pandas as pd
 
@@ -9,16 +7,9 @@ from config import (
 )
 
 
-# ─────────────────────────────────────────────────────────────
-# 1. Signal generation
-# ─────────────────────────────────────────────────────────────
-
 def find_daily_gainers(price_data, trading_days):
-    """
-    For each trading day, find stocks with intraday gain ≥ MIN_GAIN_PCT
-    (measured open→close) that also clear the minimum price and volume hurdles.
-    Returns {date: [list of gainer dicts]}, sorted by % gain descending, capped at TOP_N.
-    """
+    """Top-N stocks per day with open->close gain >= MIN_GAIN_PCT that clear
+    the price and dollar-volume hurdles."""
     daily_gainers = {}
     for date in trading_days:
         gainers = []
@@ -34,9 +25,8 @@ def find_daily_gainers(price_data, trading_days):
                 continue
             if o <= 0:
                 continue
-            pct        = (c - o) / o * 100
-            dollar_vol = c * v
-            if pct >= MIN_GAIN_PCT and c >= MIN_PRICE and dollar_vol >= MIN_DOLLAR_VOLUME:
+            pct = (c - o) / o * 100
+            if pct >= MIN_GAIN_PCT and c >= MIN_PRICE and c * v >= MIN_DOLLAR_VOLUME:
                 gainers.append({
                     "ticker":     ticker,
                     "date":       date,
@@ -50,10 +40,6 @@ def find_daily_gainers(price_data, trading_days):
 
 
 def near_earnings(ticker, date, earnings_cache, window_days=EARNINGS_WINDOW):
-    """
-    Return True if `date` is within ±window_days calendar days of any known
-    earnings release for this ticker.
-    """
     dates = earnings_cache.get(ticker, [])
     if not dates:
         return False
@@ -64,18 +50,12 @@ def near_earnings(ticker, date, earnings_cache, window_days=EARNINGS_WINDOW):
     return False
 
 
-# ─────────────────────────────────────────────────────────────
-# 2. Trade simulation
-# ─────────────────────────────────────────────────────────────
-
 def simulate_trade(ticker, signal_date, price_data):
-    """
-    Entry:  signal-day Close (market-on-close order) — captures the full
-            overnight/premarket fade before next-day open.
-    Stop:   exit at stop_price if any subsequent bar's High ≥ entry × 1.15.
-    Exit:   first bar whose close is higher than the prior close
-            (prev_close anchored to entry price on the first bar).
-    P&L:    (entry − exit) / entry × 100  (positive = profit for short).
+    """Short at signal-day close (MOC). Exit on stop (daily high vs entry*1.15),
+    first close above the prior close, or MAX_HOLD_DAYS.
+
+    prev_close starts at the entry price, so a green day immediately after
+    entry exits the trade.
     """
     df = price_data.get(ticker)
     if df is None:
@@ -93,7 +73,7 @@ def simulate_trade(ticker, signal_date, price_data):
         return None
 
     stop_price  = entry_price * (1 + STOP_LOSS_PCT / 100)
-    prev_close  = entry_price   # first comparison is vs. signal-day close
+    prev_close  = entry_price
     exit_price  = None
     exit_date   = None
     exit_reason = "max_hold"
@@ -104,7 +84,7 @@ def simulate_trade(ticker, signal_date, price_data):
         curr_close = float(row["Close"])
         bar_date   = future.index[i].strftime("%Y-%m-%d")
 
-        # Stop loss — checked against intraday high before close comparison
+        # stop first — the stock may have blown through it intraday
         if curr_high >= stop_price:
             exit_price  = stop_price
             exit_date   = bar_date
@@ -133,7 +113,7 @@ def simulate_trade(ticker, signal_date, price_data):
     return {
         "ticker":      ticker,
         "signal_date": signal_date.strftime("%Y-%m-%d"),
-        "entry_date":  signal_date.strftime("%Y-%m-%d"),   # same day — MOC order
+        "entry_date":  signal_date.strftime("%Y-%m-%d"),
         "entry_price": round(entry_price, 4),
         "exit_price":  round(exit_price, 4),
         "exit_date":   exit_date,
@@ -143,18 +123,9 @@ def simulate_trade(ticker, signal_date, price_data):
     }
 
 
-# ─────────────────────────────────────────────────────────────
-# 3. Full backtest loop
-# ─────────────────────────────────────────────────────────────
-
 def run_all_trades(daily_gainers, price_data, earnings_cache, regime_lookup):
-    """
-    Iterate over all signal days and gainers. Apply earnings filter. Simulate each trade.
-    Attach the lagged SPX regime label to each trade record.
-
-    `regime_lookup` is a dict {Timestamp: regime_str} where regime is already
-    lagged by 1 day relative to the signal date (no look-ahead).
-    """
+    """Simulate every signal, skipping earnings-adjacent ones. regime_lookup
+    must already be lagged by one day relative to the signal date."""
     trades           = []
     skipped_earnings = 0
     no_data          = 0
@@ -175,7 +146,7 @@ def run_all_trades(daily_gainers, price_data, earnings_cache, regime_lookup):
                 continue
 
             trade["signal_gain_pct"] = g["pct_change"]
-            trade["regime"]          = regime if (regime and str(regime) != "nan") else "unknown"
+            trade["regime"] = regime if (regime and str(regime) != "nan") else "unknown"
             trades.append(trade)
 
     print(f"      Trades simulated:           {len(trades)}")
@@ -184,12 +155,7 @@ def run_all_trades(daily_gainers, price_data, earnings_cache, regime_lookup):
     return trades
 
 
-# ─────────────────────────────────────────────────────────────
-# 4. Statistics
-# ─────────────────────────────────────────────────────────────
-
 def _max_drawdown(pnl_series):
-    """Peak-to-trough drawdown on a running cumulative P&L series."""
     cum  = pnl_series.cumsum()
     peak = cum.cummax()
     return float((cum - peak).min())
@@ -205,11 +171,13 @@ def compute_stats(subset):
     aw     = float(wins["pnl_pct"].mean())   if len(wins)   > 0 else 0.0
     al     = float(losses["pnl_pct"].mean()) if len(losses) > 0 else 0.0
     ap     = float(subset["pnl_pct"].mean())
+
     gross_profit = wins["pnl_pct"].sum()
     gross_loss   = abs(losses["pnl_pct"].sum())
     pf           = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+
     std    = float(subset["pnl_pct"].std())
-    sharpe = ap / std if std > 0 else 0.0   # per-trade Sharpe (not annualised)
+    sharpe = ap / std if std > 0 else 0.0   # per-trade, not annualised
     mdd    = _max_drawdown(subset.sort_values("entry_date")["pnl_pct"])
 
     kelly = 0.0
@@ -217,8 +185,6 @@ def compute_stats(subset):
         W     = wr / 100
         R     = abs(aw / al)
         kelly = W - (1 - W) / R
-
-    exit_reasons = subset["exit_reason"].value_counts().to_dict()
 
     return dict(
         n=n, wins=len(wins), losses=len(losses),
@@ -228,12 +194,11 @@ def compute_stats(subset):
         total_pnl=float(subset["pnl_pct"].sum()),
         max_win=float(subset["pnl_pct"].max()),
         max_loss=float(subset["pnl_pct"].min()),
-        exit_reasons=exit_reasons,
+        exit_reasons=subset["exit_reason"].value_counts().to_dict(),
     )
 
 
 def stats_by_regime(df):
-    """Compute stats for ALL trades and per-regime subsets."""
     result = {"ALL": compute_stats(df)}
     for regime in ["bull", "high_vol", "bear", "unknown"]:
         sub = df[df["regime"] == regime]
@@ -246,7 +211,7 @@ def print_stats_table(label, s):
     if not s:
         print(f"  {label}: no trades.")
         return
-    print(f"\n  ── {label} ({s['n']} trades) " + "─" * 34)
+    print(f"\n  -- {label} ({s['n']} trades)")
     print(f"  {'Win rate':<38} {s['win_rate']:>8.1f}%")
     print(f"  {'Avg P&L per trade':<38} {s['avg_pnl']:>8.2f}%")
     print(f"  {'Total P&L (sum, no compounding)':<38} {s['total_pnl']:>8.2f}%")

@@ -41,7 +41,7 @@ def main():
 
     print(f"{len(trades)} trades loaded.")
 
-    # ── Enrich with price-history features ─────────────────────
+    # Enrich with price-history features ─────────────────────
     vol_ratio  = []   # signal-day volume / 20d avg volume (excl. signal day)
     runup_5d   = []   # % gain over the 5 sessions before signal day
     ext_20dma  = []   # signal-day close vs 20d MA (%)
@@ -85,7 +85,7 @@ def main():
     print(f"  n={len(trades)}  win={trades['win'].mean()*100:.1f}%  "
           f"avg={pnl.mean():+.2f}%  PF={profit_factor(pnl):.2f}")
 
-    # ── Feature buckets ─────────────────────────────────────────
+    # Feature buckets ─────────────────────────────────────────
     bucket_report(
         trades, "signal_gain_pct",
         buckets=[10, 12.5, 15, 20, 30, 1000],
@@ -135,7 +135,7 @@ def main():
         print(f"  {lab:<22}{len(sub):>6}{(sub['win'].mean()*100):>7.1f}%"
               f"{pnl.mean():>8.2f}%{profit_factor(pnl):>7.2f}")
 
-    # ── Best/worst interaction: spike size × volume ratio ───────
+    # Best/worst interaction: spike size × volume ratio ───────
     print(f"\n  ── spike size × volume ratio (avg P&L %, n) " + "─" * 10)
     t2 = trades.dropna(subset=["vol_ratio"]).copy()
     t2["spike_b"] = pd.cut(t2["signal_gain_pct"], [10, 15, 25, 1000],

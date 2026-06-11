@@ -1,17 +1,12 @@
 """
-HMM Regime-Tagged Mean Reversion Short
-=======================================
-Pipeline:
-  1. Fit a 3-state Gaussian HMM on SPX daily (log return, 21d rolling vol).
-     States labelled: bull | high_vol | bear by mean daily return.
-  2. Short Russell 2000 stocks that gain ≥10% intraday with no recent earnings.
-     Entry at next-day open; stop-loss +20%; exit on first up-close or 10 days.
-  3. Attach yesterday's SPX regime label to every trade (1-day lag → no look-ahead).
-  4. Report performance split by regime: win rate, avg P&L, Sharpe, drawdown.
+HMM regime-tagged mean reversion short.
 
-Usage:
-    python -X utf8 main.py
-    python -X utf8 main.py --start 2020-01-01 --end 2024-12-31
+Shorts Russell 2000 stocks up 10%+ intraday with no earnings nearby,
+entering at the signal-day close. Tags every trade with the SPX regime
+(bull / high_vol / bear) from a walk-forward HMM and splits performance
+by regime.
+
+Usage: python -X utf8 main.py [--start YYYY-MM-DD --end YYYY-MM-DD]
 """
 
 import argparse
@@ -38,7 +33,7 @@ def main(start=START_DATE, end=END_DATE):
     print(f"  Period: {start}  →  {end}")
     print(f"{'='*62}")
 
-    # ── 1. SPX + walk-forward HMM regime labels ─────────────────
+    # 1. SPX + walk-forward HMM regime labels
     # SPX history starts at SPX_TRAIN_START so the first refit has several
     # years of training data. Each block of trading days is labelled by an
     # HMM fit only on data BEFORE that block (out-of-sample labels).
@@ -74,7 +69,7 @@ def main(start=START_DATE, end=END_DATE):
         if pd.notna(val)
     }
 
-    # ── 2. Russell 2000 price data ───────────────────────────────
+    # 2. Russell 2000 price data
     print("\n[2/5] Loading Russell 2000 price data...")
     tickers    = get_russell2000_tickers()
     price_data = load_price_cache()
@@ -85,12 +80,12 @@ def main(start=START_DATE, end=END_DATE):
             return
         save_price_cache(price_data)
 
-    # ── 3. Earnings dates ────────────────────────────────────────
+    # 3. Earnings dates
     print("\n[3/5] Earnings date cache...")
     earnings_cache = load_earnings_cache()
     earnings_cache = fetch_earnings_dates(tickers, existing_cache=earnings_cache)
 
-    # ── 4. Signals + trades ──────────────────────────────────────
+    # 4. Signals + trades
     print("\n[4/5] Finding gainer signals and simulating trades...")
     all_index    = sorted(set(idx for df in price_data.values() for idx in df.index))
     trading_days = [
@@ -114,7 +109,7 @@ def main(start=START_DATE, end=END_DATE):
     df.to_csv("trades.csv", index=False)
     print(f"      Saved → trades.csv")
 
-    # ── 5. Results ───────────────────────────────────────────────
+    # 5. Results
     print("\n[5/5] Performance by regime...")
     stats = stats_by_regime(df)
 

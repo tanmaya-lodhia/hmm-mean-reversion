@@ -15,9 +15,7 @@ from config import (
 )
 
 
-# ─────────────────────────────────────────────────────────────
 # Russell 2000 ticker list
-# ─────────────────────────────────────────────────────────────
 
 _FALLBACK_TICKERS = [
     "ACAD","AEHR","AEIS","AGIO","AGYS","AAOI","ALRM","AMKR","AMPH","ANGI",
@@ -78,9 +76,7 @@ def get_russell2000_tickers():
     return _FALLBACK_TICKERS[:MAX_TICKERS]
 
 
-# ─────────────────────────────────────────────────────────────
 # Price data (multi-year, cached)
-# ─────────────────────────────────────────────────────────────
 
 def load_price_cache():
     if os.path.exists(PRICE_CACHE):
@@ -149,9 +145,7 @@ def download_price_data(tickers, start, end):
     return price_data
 
 
-# ─────────────────────────────────────────────────────────────
 # Earnings dates (cached per ticker)
-# ─────────────────────────────────────────────────────────────
 
 def load_earnings_cache():
     if os.path.exists(EARNINGS_CACHE):
