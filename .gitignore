@@ -1,0 +1,13 @@
+# data caches
+*.pkl
+
+# generated outputs
+trades.csv
+trades_enriched.csv
+
+# python
+__pycache__/
+*.pyc
+
+# env
+.env
