@@ -54,7 +54,7 @@ A few other things from digging through the trades (`analyze_trades.py`):
 
 Caveats worth knowing: the universe is built from current tickers so delisted
 names are missing (survivorship), the earnings filter misses non-earnings
-catalysts like FDA news and M&A, and there are no borrow costs in the P&L —
+catalysts like FDA news and M&A, and there are no borrow costs in the P&L,
 which would only make things worse.
 
 ## Running it
